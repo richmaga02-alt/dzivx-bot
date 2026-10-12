@@ -11,7 +11,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPri
 # ==========================================
 # ВСТАВЬ СВОЙ ТОКЕН ЗДЕСЬ
 # ==========================================
-TOKEN = "СЮДА_ВСТАВЬ_ТОКЕН_ОТ_BOTFATHER"
+TOKEN = "8976122608:AAFOSJraKF4FXOOy85_QpwKZViaRBSKLs6Q"
 # ==========================================
 
 bot = Bot(token=TOKEN)
