@@ -8,13 +8,23 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, PreCheckoutQuery
 
-TOKEN = "8976122608:AAFOSJraKF4FXOOy85_QpwKZViaRBSKLs6Q"
+# ==========================================
+# ВСТАВЬ СВОЙ ТОКЕН ЗДЕСЬ
+# ==========================================
+TOKEN = "СЮДА_ВСТАВЬ_ТОКЕН_ОТ_BOTFATHER"
+# ==========================================
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 cooldowns = {}
 waiting_for_letters = set()
+
+# Гласные и согласные для генерации читаемых ников
+VOWELS = "aeiou"
+CONSONANTS = "bcdfghjklmnpqrstvwxyz"
+
+# ==================== БАЗА ДАННЫХ ====================
 
 def init_db():
     conn = sqlite3.connect('users.db')
@@ -97,8 +107,33 @@ def set_filter_letters(user_id, letters):
     conn.commit()
     conn.close()
 
+# ==================== ГЕНЕРАЦИЯ НИКОВ ====================
+
+def generate_username(length=6, use_digits=False):
+    """
+    Генерирует читаемый ник с чередованием гласных и согласных.
+    Например: aweboc, tibaru, komani, ebanor и т.д.
+    Если use_digits=True — иногда заменяет 1-2 буквы на цифры.
+    """
+    start_with_vowel = random.choice([True, False])
+    name = []
+    for i in range(length):
+        if (i % 2 == 0) == start_with_vowel:
+            name.append(random.choice(VOWELS))
+        else:
+            name.append(random.choice(CONSONANTS))
+    # Добавляем цифры, если включён фильтр "С цифрами" (с шансом 50%)
+    if use_digits and random.random() < 0.5:
+        for _ in range(random.randint(1, 2)):
+            pos = random.randint(0, length - 1)
+            name[pos] = random.choice(string.digits)
+    return ''.join(name)
+
 async def check_username(username):
+    # Заглушка. Для реальной проверки нужен Telethon.
     return True
+
+# ==================== КЛАВИАТУРЫ ====================
 
 def main_menu():
     kb = [
@@ -146,33 +181,41 @@ def filter_menu_kb(user_id):
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
+# ==================== ПОИСК ====================
+
 async def perform_search(call: types.CallbackQuery):
     user_id = call.from_user.id
     attempts, _, filter_digits, filter_letters = get_user(user_id)
+
     if attempts <= 0:
         text = ("🚫 Лимиты на сегодняшний день исчерпаны.\n\n"
                 "Пожалуйста, дождитесь до завтрашнего дня или купите премиум.")
         await call.message.edit_text(text, reply_markup=limit_menu())
         return
-    await call.message.edit_text("🔍Поиск юзернейма подождите🕵️")
+
+    await call.message.edit_text("🔍 Поиск юзернейма, подождите 🕵️")
     await asyncio.sleep(2)
-    chars = string.ascii_lowercase
-    if filter_digits == 1:
-        chars += string.digits
+
     found = False
     username = ""
-    while not found:
-        username = ''.join(random.choice(chars) for _ in range(6))
+    attempts_try = 0
+    while not found and attempts_try < 100:
+        attempts_try += 1
+        username = generate_username(6, use_digits=(filter_digits == 1))
         if filter_letters:
             if not all(letter in username for letter in filter_letters):
                 continue
         if await check_username(username):
             found = True
+
     use_attempt(user_id)
     attempts -= 1
     cooldowns[user_id] = time.time()
-    text = f"✨💎Юзернейм @{username} свободен!✨💎\n\n🔗 Осталось попыток сегодня: {attempts}"
+
+    text = f"✨💎 Юзернейм @{username} свободен! ✨💎\n\n🔗 Осталось попыток сегодня: {attempts}"
     await call.message.edit_text(text, reply_markup=result_menu())
+
+# ==================== ХЭНДЛЕРЫ ====================
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -201,15 +244,20 @@ async def search_next(call: types.CallbackQuery):
             await asyncio.sleep(1)
     await perform_search(call)
 
+# ==================== ФИЛЬТР ====================
+
 @dp.callback_query(F.data == "filter_menu")
 async def filter_menu_handler(call: types.CallbackQuery):
     user_id = call.from_user.id
     _, _, filter_digits, filter_letters = get_user(user_id)
     digits_check = "✓ " if filter_digits == 1 else ""
     no_digits_check = "✓ " if filter_digits == 0 else ""
-    text = ("⚙️ Фильтр\n\nВыберите, какие символы могут быть в юзернейме:\n"
-            f"• {digits_check}С цифрами\n• {no_digits_check}Без цифр\n\n"
-            "🔸 Premium функция: укажите 2 английские буквы,\nкоторые обязательно должны быть в юзернейме.\n\n"
+    text = ("⚙️ Фильтр\n\n"
+            "Выберите, какие символы могут быть в юзернейме:\n"
+            f"• {digits_check}С цифрами\n"
+            f"• {no_digits_check}Без цифр\n\n"
+            "🔸 Premium функция: укажите 2 английские буквы,\n"
+            "которые обязательно должны быть в юзернейме.\n\n"
             f"Текущий фильтр букв: {filter_letters if filter_letters else 'не задан'}")
     await call.message.edit_text(text, reply_markup=filter_menu_kb(user_id))
 
@@ -230,7 +278,11 @@ async def filter_set_letters_handler(call: types.CallbackQuery):
         await call.answer("⚠️ Эта функция доступна только с Premium!", show_alert=True)
         return
     waiting_for_letters.add(user_id)
-    await call.message.edit_text("🔤 Напишите 2 английские буквы, которые обязательно должны быть в юзернейме.\n\nНапример: `ab`", parse_mode="Markdown")
+    await call.message.edit_text(
+        "🔤 Напишите 2 английские буквы, которые обязательно должны быть в юзернейме.\n\n"
+        "Например: `ab`",
+        parse_mode="Markdown"
+    )
 
 @dp.message(F.text)
 async def handle_letters_input(message: types.Message):
@@ -246,11 +298,21 @@ async def handle_letters_input(message: types.Message):
         return
     waiting_for_letters.discard(user_id)
     set_filter_letters(user_id, text)
-    await message.answer(f"✅ Фильтр по буквам сохранён: `{text}`", reply_markup=main_menu(), parse_mode="Markdown")
+    await message.answer(
+        f"✅ Фильтр по буквам сохранён: `{text}`",
+        reply_markup=main_menu(),
+        parse_mode="Markdown"
+    )
+
+# ==================== ПРЕМИУМ ====================
 
 @dp.callback_query(F.data == "buy_prem")
 async def buy_prem(call: types.CallbackQuery):
-    text = "💎 Выберите тариф Premium:\n\n20⭐ = 1 день ✨\n60⭐ = 3 дня ⭐\n140✨ = 7 дней 💎\n600🌟 = 30 дней 🫪"
+    text = ("💎 Выберите тариф Premium:\n\n"
+            "20⭐ = 1 день ✨\n"
+            "60⭐ = 3 дня ⭐\n"
+            "140✨ = 7 дней 💎\n"
+            "600🌟 = 30 дней 🫪")
     await call.message.edit_text(text, reply_markup=premium_menu())
 
 @dp.callback_query(F.data == "back_main")
@@ -268,11 +330,21 @@ async def back_main(call: types.CallbackQuery):
 async def close_menu(call: types.CallbackQuery):
     await call.message.delete()
 
+# ==================== ОПЛАТА ЗВЁЗДАМИ ====================
+
 @dp.callback_query(F.data.startswith("pay_stars_"))
 async def process_pay_stars(call: types.CallbackQuery):
     days = int(call.data.split("_")[2])
     prices_stars = {1: 20, 3: 60, 7: 140, 30: 600}
-    await bot.send_invoice(chat_id=call.from_user.id, title=f"Premium на {days} дней", description=f"Доступ к поиску 5-буквенных юзернеймов на {days} дней.", payload=f"premium_stars_{days}", provider_token="", currency="XTR", prices=[LabeledPrice(label=f"Premium {days} дней", amount=prices_stars[days])])
+    await bot.send_invoice(
+        chat_id=call.from_user.id,
+        title=f"Premium на {days} дней",
+        description=f"Доступ к поиску 5-буквенных юзернеймов на {days} дней.",
+        payload=f"premium_stars_{days}",
+        provider_token="",
+        currency="XTR",
+        prices=[LabeledPrice(label=f"Premium {days} дней", amount=prices_stars[days])]
+    )
 
 @dp.pre_checkout_query()
 async def pre_checkout(pre_checkout_q: PreCheckoutQuery):
@@ -284,6 +356,8 @@ async def successful_payment(message: types.Message):
     days = int(payload.split("_")[2])
     set_premium(message.from_user.id, days)
     await message.answer(f"✅ Premium на {days} дней успешно активирован!")
+
+# ==================== ЗАПУСК ====================
 
 async def main():
     print("=== БОТ ЗАПУСКАЕТСЯ ===")
